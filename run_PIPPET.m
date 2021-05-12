@@ -2,7 +2,7 @@
 % Simulates PIPPET model with specified parameters.
 
 
-function [mu_list, V_list, surprisal_prepost, grad_surprisal] = run_PIPPET(params)
+function [mu_list, V_list, lambda_history, surprisal_prepost, grad_surprisal] = run_PIPPET(params)
 
 t_max = params.tmax;
 dt = params.dt;
@@ -20,8 +20,15 @@ V_list(1) = params.V_0;
 surprisal_prepost = zeros([numel(t_list), params.n_streams, 2]);
 
 event_num = ones(1,params.n_streams);
-tap_num = 0;
-tap_thresh = params.tap_threshold;
+%tap_num = 0;
+%tap_thresh = params.tap_threshold;
+
+lambda_history = cell(1, numel(params.streams));
+
+for j = 1:params.n_streams;
+    lambda_history{j} = zeros(numel(params.streams{j}.e_lambdas), numel(t_list));
+    lambda_history{j}(:,1) = params.streams{j}.e_lambdas;
+end
 
 for i=2:length(t_list)
     t = t_list(i);
@@ -30,20 +37,26 @@ for i=2:length(t_list)
     V_past = V_list(i-1);
     mu_past = mu_list(i-1);
     
+    active_lambdas = cell(1, numel(params.streams));
+    for j = 1:params.n_streams
+        active_lambdas{j} = lambda_history{j}(:,i-1)';
+    end
+    
     dmu_sum = 0;
     dV_sum = 0;
     
     grad_surprisal_sum = 0;
     
     for j = 1:params.n_streams
-        dmu_sum = dmu_sum + params.streams{j}.Lambda(mu_past, V_past)*(params.streams{j}.mu_hat(mu_past, V_past)-mu_past);
+        dmu_sum = dmu_sum + params.streams{j}.Lambda(mu_past, V_past, active_lambdas{j})...
+            *(params.streams{j}.mu_hat(mu_past, V_past, active_lambdas{j})-mu_past);
     end
     
     dmu = dt*(1 - dmu_sum) + sqrt(dt)*eta_phi*randn();
     mu = mu_past+dmu;
     
     for j = 1:params.n_streams
-        dV_sum = dV_sum + params.streams{j}.Lambda(mu_past, V_past)*(params.streams{j}.V_hat(mu, mu_past, V_past)-V_past);
+        dV_sum = dV_sum + params.streams{j}.Lambda(mu_past, V_past, active_lambdas{j})*(params.streams{j}.V_hat(mu, mu_past, V_past, active_lambdas{j})-V_past);
     end
     
     dV = dt*(sigma_phi^2 - dV_sum);
@@ -51,30 +64,35 @@ for i=2:length(t_list)
     
     for j = 1:params.n_streams
         if event_num(j) <= length(params.streams{j}.perceived_event_times) && (t>=params.streams{j}.perceived_event_times(event_num(j)) && t_past<=params.streams{j}.perceived_event_times(event_num(j)))
-            mu_tmp = params.streams{j}.mu_hat(mu, V);
-            V = params.streams{j}.V_hat(mu_tmp, mu, V);
+            mu_tmp = params.streams{j}.mu_hat(mu, V, active_lambdas{j});
+            V = params.streams{j}.V_hat(mu_tmp, mu, V, active_lambdas{j});
             mu = mu_tmp;
             event_num(j) = event_num(j)+1;
-            surprisal_prepost(i,j,1) = -log(params.streams{j}.Lambda(mu_past, V_past)*dt);
-            surprisal_prepost(i,j,2) = -log(params.streams{j}.Lambda(mu, V)*dt);
+            surprisal_prepost(i,j,1) = -log(params.streams{j}.Lambda(mu_past, V_past, active_lambdas{j})*dt);
+            surprisal_prepost(i,j,2) = -log(params.streams{j}.Lambda(mu, V, active_lambdas{j})*dt);
             grad_surprisal_sum = grad_surprisal_sum ...
-                +(-log(params.streams{j}.Lambda(mu_past+.01, V_past)*dt) + log(params.streams{j}.Lambda(mu_past-.01, V_past)*dt))/.02;
+                +(-log(params.streams{j}.Lambda(mu_past+.01, V_past, active_lambdas{j})*dt) + log(params.streams{j}.Lambda(mu_past-.01, V_past, active_lambdas{j})*dt))/.02;
+            
+            if params.masking
+                active_lambdas{j} = active_lambdas{j} .* (1 - (params.streams{j}.Lambda_i_list(mu_past, V_past, active_lambdas{j}) / params.streams{j}.Lambda(mu_past, V_past, active_lambdas{j})));
+            end
         else
         
-            surprisal_prepost(i,j,1) = -log(1-params.streams{j}.Lambda(mu_past, V_past)*dt);
-            surprisal_prepost(i,j,2) = -log(1-params.streams{j}.Lambda(mu, V)*dt);
+            surprisal_prepost(i,j,1) = -log(1-params.streams{j}.Lambda(mu_past, V_past, active_lambdas{j})*dt);
+            surprisal_prepost(i,j,2) = -log(1-params.streams{j}.Lambda(mu, V, active_lambdas{j})*dt);
             grad_surprisal_sum = grad_surprisal_sum ...
-                +(-log(1-params.streams{j}.Lambda(mu_past+.01, V_past)*dt) + log(1-params.streams{j}.Lambda(mu_past-.01, V_past)*dt))/.02;
+                +(-log(1-params.streams{j}.Lambda(mu_past+.01, V_past, active_lambdas{j})*dt) + log(1-params.streams{j}.Lambda(mu_past-.01, V_past, active_lambdas{j})*dt))/.02;
         end
+        lambda_history{j}(:,i) = active_lambdas{j}';
     end
     if params.tapping
-        if mu > tap_num * params.intertap_phase + tap_thresh
-            tap_time = t + params.intertap_phase - tap_thresh...
-                         + params.motor_eta*randn();
-            params.streams{params.tap_stream}.event_times(end+1) = tap_time;
-            params.streams{params.tap_stream}.perceived_event_times(end+1) = tap_time + params.eta_e*randn();
-            tap_num = tap_num+1;
-        end
+%         if mu > tap_num * params.intertap_phase + tap_thresh
+%             tap_time = t + params.intertap_phase - tap_thresh...
+%                          + params.motor_eta*randn();
+%             params.streams{params.tap_stream}.event_times(end+1) = tap_time;
+%             params.streams{params.tap_stream}.perceived_event_times(end+1) = tap_time + params.eta_e*randn();
+%             tap_num = tap_num+1;
+%         end
     end
 
     mu_list(i) = mu;

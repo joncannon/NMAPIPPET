@@ -29,12 +29,13 @@ addParameter(p,'eta_phi',0);                 % Internal phase noise
 addParameter(p,'eta_e',0);                   % Internal event noise
 addParameter(p,'display', true);             % Display graphic showing evolution of phase posterior over time
 addParameter(p,'tapping', false);             % Simulate taps
-addParameter(p,'tap_threshold', 0.4);        % If tapping, at what phase is tap action initiated (no correction after that)
-addParameter(p,'tap_stream', 2);             % Event stream associated with taps
-addParameter(p,'intertap_phase', .5);         % Tap period (measured in phase units)
+% addParameter(p,'tap_threshold', 0.4);        % If tapping, at what phase is tap action initiated (no correction after that)
+% addParameter(p,'tap_stream', 2);             % Event stream associated with taps
+% addParameter(p,'intertap_phase', .5);         % Tap period (measured in phase units)
 addParameter(p,'title', '');                 % Title of simulation
-addParameter(p,'motor_eta', 0);            % SD of noise added to each tap time
+% addParameter(p,'motor_eta', 0);            % SD of noise added to each tap time
 addParameter(p,'stream_colors', {"k", "r", "g"});  % Color specs for each stream
+addParameter(p,'masking', false);             % Do event expectations disappear once the event occurs?
 
 parse(p,varargin{:})
 out = p.Results;

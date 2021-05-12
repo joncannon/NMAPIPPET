@@ -38,8 +38,8 @@ p.e_lambdas = repmat(lambda_unit, [1,expected_cycles]);
 
 mu_i_list = @(mu, V) (mu/V + p.e_means./p.e_vars)./(1/V + 1./p.e_vars);
 K_i_list = @(V) 1./(1/V + 1./p.e_vars);
-Lambda_i_list = @(mu, V) p.e_lambdas .* gauss_distribution(mu, p.e_means, p.e_vars+V);
+p.Lambda_i_list = @(mu, V, lambdas) lambdas .* gauss_distribution(mu, p.e_means, p.e_vars+V);
 
-p.Lambda = @(mu, V) lambda_0 + sum(Lambda_i_list(mu, V));
-p.mu_hat = @(mu, V) (lambda_0*mu + sum(Lambda_i_list(mu, V) .* mu_i_list(mu,V)))/p.Lambda(mu,V);
-p.V_hat= @(mu_new, mu_old, V) (lambda_0*(V+(mu_old-mu_new).^2) + sum(Lambda_i_list(mu_old, V) .* (K_i_list(V) + (mu_i_list(mu_old, V)-mu_new).^2)))/p.Lambda(mu_old,V);
+p.Lambda = @(mu, V, lambdas) lambda_0 + sum(p.Lambda_i_list(mu, V, lambdas));
+p.mu_hat = @(mu, V, lambdas) (lambda_0*mu + sum(p.Lambda_i_list(mu, V, lambdas) .* mu_i_list(mu,V)))/p.Lambda(mu,V, lambdas);
+p.V_hat= @(mu_new, mu_old, V, lambdas) (lambda_0*(V+(mu_old-mu_new).^2) + sum(p.Lambda_i_list(mu_old, V, lambdas) .* (K_i_list(V) + (mu_i_list(mu_old, V)-mu_new).^2)))/p.Lambda(mu_old,V, lambdas);
